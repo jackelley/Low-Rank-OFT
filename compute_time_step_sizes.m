@@ -21,6 +21,7 @@ while current_time <= t_end
 end
 
 % Truncate unused space
+n = n - 1;
 times = times(:, 1:n);
 
 end
