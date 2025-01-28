@@ -78,7 +78,7 @@ tic
     V_hat = [Vm1, V, A * V];
     cell = {U_hat, S_hat, V_hat};
 
-    [U, S, V] = truncsum2(cell, 1e-3, 100);
+    [U, S, V] = truncsum_fixed(cell, 1e-3, 100);
  
   %
   % Update OFT sum.

@@ -1,4 +1,4 @@
-function [U, S, V] = truncsum2(C, tol, rmax)
+function [U, S, V] = truncsum_fixed(C, tol, rmax)
 % This function returns the truncated sum of low rank matrix 
 % stored in the cell C
 % C has three parts, Ui, Si, Vi
