@@ -17,13 +17,13 @@
 
   nmax = fix( Tf / dt );
 
-  u   = zeros( N, N );
-  um0 = zeros( N, N );
-  um1 = zeros( N, N );
-  vAp = zeros( N, N );
-  vEx = zeros( N, N );
-  X = zeros(N, N);
-  Y = zeros(N, N);
+  u   = gpuArray(zeros(N, N));
+  um0 = gpuArray(zeros(N, N));
+  um1 = gpuArray(zeros(N, N));
+  vAp = gpuArray(zeros(N, N));
+  vEx = gpuArray(zeros(N, N));
+  X = gpuArray(zeros(N, N));
+  Y = gpuArray(zeros(N, N));
 
   for j = 1:N
       for i = 1:N
@@ -41,14 +41,13 @@
   vAp = 0.5 * dt * u;
 
   um0 = u;  % aka u^{n-0}
-  um1 = 0;  % aka u^{n-1}
 
   n = 1;
 
   r = 1i * dt / dx^2;
 
   e = ones(N, 1);
-  A = spdiags([e -2*e e], -1:1, N, N);
+  A = gpuArray(spdiags([e -2*e e], -1:1, N, N));
 
   % u( 2:N-1 ) = u( 2:N-1 ) + r * ( u( 3:N ) - 2 * u( 2:N-1 ) + u( 1:N-2 ) );
   u = u + r * (A * u + u * A);
@@ -73,17 +72,18 @@ tic
     % u = um1 + r * (A * u + u * A);
     % u( 2:N-1 ) = um1( 2:N-1 ) + r * ( u( 3:N ) - 2 * u( 2:N-1 ) + u( 1:N-2 ) );
 
-    U_hat = [Um1, A * U, U];
-    S_hat = blkdiag(Sm1, r * S, r * S);
-    V_hat = [Vm1, V, A * V];
+    U_hat = gpuArrau([Um1, A * U, U]);
+    S_hat = gpuArray(blkdiag(Sm1, r * S, r * S));
+    V_hat = gpuArray([Vm1, V, A * V]);
     cell = {U_hat, S_hat, V_hat};
 
-    [U, S, V] = truncsum2(cell, 1e-7, 100);
+    [U, S, V] = truncsum_fixed(cell, 1e-3, 100);
  
   %
   % Update OFT sum.
   %
-    vAp = vAp + dt .* exp( -n * dt ) .* (U * S * V');
+
+  vAp = vAp + dt .* exp( -n * dt ) .* (U * S * V');
 
   %
   % Update previous solutions.
@@ -99,6 +99,9 @@ tic
     Vm0 = V;
 
   end
+  vAp = gather(vAp);
+
+
 toc
 
 %
