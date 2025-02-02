@@ -87,7 +87,7 @@ tic
 % Print relative error.
 %
   vEx = sin( pi * X ) .* sin(pi * Y);  
-  relErr = norm( vEx - vAp, 'inf' ) / norm( vEx, 'inf' );
+  relErr = norm( vEx - vAp, 'fro' ) / norm( vEx, 'fro' );
 
   fprintf('\n' )
   fprintf(' Relative error = %8.2e\n', relErr )
