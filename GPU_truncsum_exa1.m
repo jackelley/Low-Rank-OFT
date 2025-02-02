@@ -37,7 +37,7 @@
 %
   n = 0;
 
-  u   = (1 + 2i * pi^2) .* sin( pi * X ) .* sin(pi * Y);
+  u   = gpuArray((1 + 2i * pi^2) .* sin( pi * X ) .* sin(pi * Y));
   vAp = 0.5 * dt * u;
 
   um0 = u;  % aka u^{n-0}
@@ -72,12 +72,12 @@ tic
     % u = um1 + r * (A * u + u * A);
     % u( 2:N-1 ) = um1( 2:N-1 ) + r * ( u( 3:N ) - 2 * u( 2:N-1 ) + u( 1:N-2 ) );
 
-    U_hat = gpuArrau([Um1, A * U, U]);
+    U_hat = gpuArray([Um1, A * U, U]);
     S_hat = gpuArray(blkdiag(Sm1, r * S, r * S));
     V_hat = gpuArray([Vm1, V, A * V]);
     cell = {U_hat, S_hat, V_hat};
 
-    [U, S, V] = truncsum_fixed(cell, 1e-3, 100);
+    [U, S, V] = GPU_truncsum(cell, 1e-3, 100);
  
   %
   % Update OFT sum.
