@@ -1,0 +1,308 @@
+function [U,S,V,RRR,TTT] = LRIAT_ie_merge2(tend,nx,ny,dt,scrpt);
+
+% test residual for Taylor before merge with BUG
+
+    addpath('./../../service');
+
+    eval(scrpt);
+    n_ops = size(RH_OP,1);
+    % Truncation at 10 x machine eps for the predicted space.
+    TOL_PRE = 10*2.2204e-16;
+
+    % Store the singular values, the rank, error and time.
+    RRR = sparse(100*round(tend/dt),4);
+    TTT = [];
+    t = 0;
+    % Initial data
+    % If a low rank representation is known we use it
+    % If only a 2D function is known we compute the SVD (could be
+    % improved to use threshold SVD)
+    if (r > 0)
+        U = zeros(nx,r);
+        V = zeros(ny,r);
+        for ir = 1:r
+            for i = 1:nx
+                U(i,ir) = gx(x(i),ir);
+            end
+            for j = 1:ny
+                V(j,ir) = gy(y(j),ir);
+            end
+        end
+        [QU,RU] = qr(U,'econ');
+        [QV,RV] = qr(V,'econ');
+        [U1,S1,V1] = svd(RU*RV');
+        U = QU*U1(:,1:r);
+        V = QV*V1(:,1:r);
+        S = S1(1:r,1:r);
+    else
+        T = zeros(nx,ny);
+        % Initial data and forcing
+        for i = 1:nx
+            for j = 1:ny
+                T(i,j) = g(x(i),y(j));
+            end
+        end
+        % T = T - sum(sum(T));
+        % Throughout we work with weighted values
+        [U,S,V] = svd(T);
+        % Truncate based on the Frobenius norm
+        % We sum up the squares of the singular values from below
+        % and compare to TOL^2
+        sd = diag(S);
+        energy = cumsum(sd(end:-1:1).^2);
+        r = length(energy) - length(find(energy < dt^6));
+        U = U(:,1:r);
+        V = V(:,1:r);
+        S = S(1:r,1:r);
+    end
+
+    RRR(1,1) = r;
+
+    h = x(2)-x(1);
+    TOL_RES = C2*(dt^2+h^3)/h; %C2*dt^2;
+    TOL1 = C1*dt;
+    % FOR REVISION
+    TOL2 = C2*(dt^2+h^3)/h;
+    % FIRST SUBMIT
+    % TOL2 = C2*dt^2;
+
+    % Do some timestepping
+    it = 0;
+    t = 0;
+    while t < tend
+        it = it+1;
+        if (t+dt > tend)
+            dt = tend-t;
+        end
+        % Prediction step.
+        % Here we compute the column and row spaces
+        % Additions to the subspaces based on
+        % u_t = PDE
+        if (use_truncation)
+            for iops = 1:n_ops
+                C{iops,1} = RH_OP{iops,1}*U;
+                C{iops,2} = S;
+                C{iops,3} = RH_OP{iops,2}*V;
+            end
+            [QU,QS,QV] = trunc_sum(C,TOL1,n_ops*r);
+            AU = [U QU];
+            AV = [V QV];
+        else
+            AU = zeros(nx,(n_ops+1)*r);
+            AV = zeros(ny,(n_ops+1)*r);
+            AU(:,1:r) = U;
+            AV(:,1:r) = V;
+            for iops = 1:n_ops
+                AU(:,iops*r+1:(iops+1)*r) = RH_OP{iops,1}*U;
+                AV(:,iops*r+1:(iops+1)*r) = RH_OP{iops,2}*V;
+            end
+        end
+        % Start by the "extra" solve
+        % Orthogonalize the proposed spaces
+        [QU,RU,PU] = qr(AU,'econ');
+        [QV,RV,PV] = qr(AV,'econ');
+        % Prediction by SVD columns space for U and V
+        sd = abs(diag(RU));
+        ru = length(find(sd >= TOL_PRE));
+        sd = abs(diag(RV));
+        rv = length(find(sd >= TOL_PRE));
+        % These are in the weighted space
+        Upre = QU(:,1:ru);
+        Vpre = QV(:,1:rv);
+        % Compute terms in the PDE based on the
+        % predicted subspaces
+        % This is the implicit Euler step.
+        % Galerkin evolution
+        if (use_direct == 1)
+
+            Csylv0 = (Upre'*U)*S*(V'*Vpre);
+
+            % B1 and A4 are easy to invert
+            % A1 and B4 are contractive
+            B1 = (RH_OP{1,2}*Vpre)'*Vpre;
+            A4 = -dt*(Upre'*(RH_OP{4,1}*Upre));
+            A4I = A4\eye(size(A4));
+            B1I = B1\eye(size(B1));
+
+            A1 = A4I*(eye(ru,ru)-dt*(Upre'*(RH_OP{1,1}*Upre)));
+            A2 = A4I*(-dt*(Upre'*(RH_OP{2,1}*Upre)));
+            A3 = A4I*(-dt*(Upre'*(RH_OP{3,1}*Upre)));
+            B2 = ((RH_OP{2,2}*Vpre)'*Vpre)*B1I;
+            B3 = ((RH_OP{3,2}*Vpre)'*Vpre)*B1I;
+            B4 = ((RH_OP{4,2}*Vpre)'*Vpre)*B1I;
+            CORE0 = Csylv0;
+            Csylv0 = A4I*Csylv0*B1I;
+            for iter = 1:1000
+                C = Csylv0 - A2*CORE0*B2 - A3*CORE0*B3;
+                CORE = sylvester(A1,B4,C);
+                if(norm(CORE-CORE0) < dlra_core_tol)
+                    %disp([iter norm(CORE-CORE0)])
+                    RRR(it+1,3) = iter;
+                    break
+                end
+                CORE0 = CORE;
+            end
+        else
+            Csylv = (Upre'*U)*S*(V'*Vpre);
+            CGE = cell(n_ops+1,2);
+            for iops = 1:n_ops
+                CGE{iops,1} = -dt*(Upre'*(RH_OP{iops,1}*Upre));
+                CGE{iops,2} = (RH_OP{iops,2}*Vpre)'*Vpre;
+            end
+            CGE{n_ops+1,1} = speye(ru,ru);
+            CGE{n_ops+1,2} = speye(rv,rv);
+            [CORE,FLAG,RELRES,ITER] = gmres_sylvester(Csylv,CGE, dlra_core_tol, max(size(Csylv)));
+            RRR(it+1,3) = RRR(it+1,3) + ITER(2);
+        end
+        [Ucore,Score,Vcore] = svd(CORE);
+        % We truncate the Galerkin evolution based on the LTE
+        sd = diag(Score);
+        energy = cumsum(sd(end:-1:1).^2);
+        rnew = length(energy) - length(find(energy < TOL2^2));
+        Unew = Upre*Ucore(:,1:rnew);
+        Vnew = Vpre*Vcore(:,1:rnew);
+        Snew = Score(1:rnew,1:rnew);
+
+        % Check the norm of the residual
+        CRES = cell(n_ops+2,3);
+        % This is AXB^T
+        for iops = 1:n_ops
+            CRES{iops,1} = RH_OP{iops,1}*Unew;
+            CRES{iops,2} = dt*Snew;
+            CRES{iops,3} = RH_OP{iops,2}*Vnew;
+        end
+        CRES{n_ops+1,1} = Unew;
+        CRES{n_ops+1,2} = -Snew;
+        CRES{n_ops+1,3} = Vnew;
+        CRES{n_ops+2,1} = U;
+        CRES{n_ops+2,2} = S;
+        CRES{n_ops+2,3} = V;
+        % We truncate slightly tighter than for the solver
+        [rU,rS,rV] = trunc_sum(CRES,0.1*TOL2,n_ops*rnew);
+        res = sqrt(inner_low(rU,rS,rV,rU,rS,rV));
+
+        % If the residual is small enough we break out
+        % of the while loop with a new timestep
+        % If not, we use don't adjust the timestep yet
+        % but first try to add the BUG space to see if
+        % that reduces the residual suficiently.
+        if res < TOL_RES
+            U = Unew;
+            V = Vnew;
+            S = Snew;
+            r = rnew;
+        else
+            RRR(it+1,2) = RRR(it+1,2) + 1;
+
+            % Then we add the BUG spaces
+            K0 = U*S;
+            nk = size(K0,2);
+            CK = cell(n_ops+1,2);
+            for iops = 1:n_ops
+                CK{iops,1} = RH_OP{iops,1};
+                CK{iops,2} = -dt*(RH_OP{iops,2}*V)'*V;
+            end
+            CK{n_ops+1,1} = speye(nx,nx);
+            CK{n_ops+1,2} = speye(nk,nk);
+            [K1,FLAG,RELRES,ITER] = gmres_sylvester(K0,CK, dlra_bug_tol,nx*nk);
+
+            RRR(it+1,4) = RRR(it+1,4) + ITER(2);
+
+            L0 = V*S';
+            nl = size(L0,2);
+            CL = cell(n_ops+1,2);
+            for iops = 1:n_ops
+                CL{iops,1} = RH_OP{iops,2};
+                CL{iops,2} = -dt*(RH_OP{iops,1}*U)'*U;
+            end
+            CL{n_ops+1,1} = speye(ny,ny);
+            CL{n_ops+1,2} = speye(nk,nk);
+            [L1,FLAG,RELRES,ITER] = gmres_sylvester(L0,CL, dlra_bug_tol, ny*nl);
+            RRR(it+1,4) = RRR(it+1,4) + ITER(2);
+            % Merge the spaces
+            AU = [AU K1];
+            AV = [AV L1];
+
+            % Orthogonalize the proposed spaces
+            [QU,RU,PU] = qr(AU,'econ');
+            [QV,RV,PV] = qr(AV,'econ');
+            % Prediction by SVD columns space for U and V
+            sd = abs(diag(RU));
+            ru = length(find(sd >= TOL_PRE));
+            sd = abs(diag(RV));
+            rv = length(find(sd >= TOL_PRE));
+            % These are in the weighted space
+            Upre = QU(:,1:ru);
+            Vpre = QV(:,1:rv);
+            % Compute terms in the PDE based on the
+            % predicted subspaces
+            % This is the implicit Euler step.
+            % Galerkin evolution
+            if (use_direct == 1)
+
+                Csylv0 = (Upre'*U)*S*(V'*Vpre);
+
+                % B1 and A4 are easy to invert
+                % A1 and B4 are contractive
+                B1 = (RH_OP{1,2}*Vpre)'*Vpre;
+                A4 = -dt*(Upre'*(RH_OP{4,1}*Upre));
+                A4I = A4\eye(size(A4));
+                B1I = B1\eye(size(B1));
+
+                A1 = A4I*(eye(ru,ru)-dt*(Upre'*(RH_OP{1,1}*Upre)));
+                A2 = A4I*(-dt*(Upre'*(RH_OP{2,1}*Upre)));
+                A3 = A4I*(-dt*(Upre'*(RH_OP{3,1}*Upre)));
+                B2 = ((RH_OP{2,2}*Vpre)'*Vpre)*B1I;
+                B3 = ((RH_OP{3,2}*Vpre)'*Vpre)*B1I;
+                B4 = ((RH_OP{4,2}*Vpre)'*Vpre)*B1I;
+                CORE0 = Csylv0;
+                Csylv0 = A4I*Csylv0*B1I;
+                for iter = 1:1000
+                    C = Csylv0 - A2*CORE0*B2 - A3*CORE0*B3;
+                    CORE = sylvester(A1,B4,C);
+                    if(norm(CORE-CORE0) < dlra_core_tol)
+                        %disp([iter norm(CORE-CORE0)])
+                        RRR(it+1,3) = RRR(it+1,3) + iter;
+                        break
+                    end
+                    CORE0 = CORE;
+                end
+            else
+                Csylv = (Upre'*U)*S*(V'*Vpre);
+                CGE = cell(n_ops+1,2);
+                for iops = 1:n_ops
+                    CGE{iops,1} = -dt*(Upre'*(RH_OP{iops,1}*Upre));
+                    CGE{iops,2} = (RH_OP{iops,2}*Vpre)'*Vpre;
+                end
+                CGE{n_ops+1,1} = speye(ru,ru);
+                CGE{n_ops+1,2} = speye(rv,rv);
+                [CORE,FLAG,RELRES,ITER] = gmres_sylvester(Csylv,CGE, dlra_core_tol, max(size(Csylv)));
+                RRR(it+1,3) = RRR(it+1,3) + ITER(2);
+            end
+            [Ucore,Score,Vcore] = svd(CORE);
+            % We truncate the Galerkin evolution based on the LTE
+            sd = diag(Score);
+            energy = cumsum(sd(end:-1:1).^2);
+            rnew = length(energy) - length(find(energy < TOL2^2));
+            U = Upre*Ucore(:,1:rnew);
+            V = Vpre*Vcore(:,1:rnew);
+            S = Score(1:rnew,1:rnew);
+            r = rnew;
+        end
+% $$$         if(mod(it,10) == 1)
+% $$$             figure(100)
+% $$$             contour(U*S*V',linspace(-1,1,50),'linewidth',2)
+% $$$             colorbar
+% $$$             title(['time ' num2str(t) ' rank ' num2str(r)])
+% $$$             axis equal
+% $$$             drawnow
+% $$$         end
+%pause
+            t = t+dt;
+            % Record the rank and the time
+            RRR(it+1,1) = r;
+            TTT(it+1) = t;
+    end
+    TTT = TTT(1:it+1);
+    RRR = RRR(1:it+1,:);
+end
