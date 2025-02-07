@@ -2,9 +2,7 @@ clear
 format short e
 format compact
 
-addpath('./service/service')
-
-scrpt = 'ani_heat_setup';
+scrpt = 'heat_setup';
 mu = 1;
 tend = 0.25;
 
