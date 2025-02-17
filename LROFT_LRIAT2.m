@@ -58,10 +58,11 @@ e = ones(N, 1);
 A1 = (1i/hx^2)*spdiags([e, -2 * e, e], -1:1,N,N);
 B1 = speye(N, N);
 
-e = ones(N, 1);
-B2 = (1i/hy^2)*spdiags([e, -2 * e, e], -1:1,N,N);
 A2 = speye(N, N);
+B2 = (1i/hy^2)*spdiags([e, -2 * e, e], -1:1,N,N);
 
+A1 = full(A1);
+B2 = full(B2);
 RH_OP = {A1, B1
     A2, B2};
 
@@ -215,7 +216,7 @@ while t < Tf
         CK{n_ops+1,1} = speye(N,N);
         CK{n_ops+1,2} = speye(nk,nk);
         % [K1,FLAG,RELRES,ITER] = gmres_sylvester(K0,CK, dlra_bug_tol,N*nk);
-        K1 = sylvester(-dt * full(RH_OP{1, 1}), eye(nk, nk) -dt * (RH_OP{2, 2}*V)'*V, K0);
+        K1 = sylvester(-dt * RH_OP{1, 1}, eye(nk, nk) -dt * (RH_OP{2, 2}*V)'*V, K0);
 
         L0 = V*S';
         nl = size(L0,2);
@@ -227,7 +228,7 @@ while t < Tf
         CL{n_ops+1,1} = speye(N,N);
         CL{n_ops+1,2} = speye(nk,nk);
         % [L1,FLAG,RELRES,ITER] = gmres_sylvester(L0,CL, dlra_bug_tol, N*nl);
-        L1 = sylvester(eye(nk, nk) - dt*(RH_OP{1,1}*U)'*U, -dt * full(RH_OP{2, 2}), L0');
+        L1 = sylvester(eye(nk, nk) - dt*(RH_OP{1,1}*U)'*U, -dt * RH_OP{2, 2}, L0');
         % Merge the spaces
         AU = [AU K1];
         AV = [AV L1'];
