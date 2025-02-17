@@ -10,12 +10,12 @@
 addpath('service/service');
 
 N    = 100; % # of spatial domain points.
-xmin = 0.0; xmax = 1.0;
+xmin = -1.0; xmax = 1.0;
 dx   = (xmax-xmin) / (N+1);
 x    = (xmin + dx:dx:xmax - dx)';
 y = x;
-Tf   = 2;
-dt = 0.001;
+Tf   = 6;
+dt = 0.01;
 nt_max = fix(Tf / dt);
 % Truncation at 10 x machine eps for the predicted space.
 TOL_PRE = 10*2.2204e-16;
@@ -71,18 +71,20 @@ n_ops = size(RH_OP,1);
 % Set the initial condition(s).
 %
 current_rank = 1;
-U = exp(-36 * y.^2);
-V = exp(-36 * x.^2);
-% S = norm(U, 2) * norm(V, 2);
-% U = U ./ norm(U, 2);
-% V = V ./ norm(V, 2);
+% U = exp(-36 * y.^2);
+% V = exp(-36 * x.^2);
+U = sin(pi * x);
+V = sin(pi * y);
+S = norm(U, 2) * norm(V, 2);
+U = U ./ norm(U, 2);
+V = V ./ norm(V, 2);
 
-[QU,RU] = qr(U,'econ');
-[QV,RV] = qr(V,'econ');
-[U1,S1,V1] = svd(RU*RV');
-U = QU*U1(:,1:current_rank);
-V = QV*V1(:,1:current_rank);
-S = dt * S1(1:current_rank,1:current_rank);
+% [QU,RU] = qr(U,'econ');
+% [QV,RV] = qr(V,'econ');
+% [U1,S1,V1] = svd(RU*RV');
+% U = QU*U1(:,1:current_rank);
+% V = QV*V1(:,1:current_rank);
+% S = dt * S1(1:current_rank,1:current_rank);
 
 % Do a direct solve
 A_direct = spdiags([e -2*e e], -1:1, N, N);
@@ -92,11 +94,13 @@ L = kron(A_direct, speye(N, N)) + kron(speye(N, N), A_direct);
 L = speye(N * N, N * N) - (1i / dx^2) * L;
 U_direct = L \ f;
 U_direct = reshape(U_direct, N, N);
+% return
 
 % USV holds the integral, intialize first point
 U_vAp = U;
 V_vAp = V;
-S_vAp = dt * S;
+% S_vAp = dt * S;
+S_vAp = dt / (2i * pi^2) * S;
 
 tic
 
@@ -210,7 +214,8 @@ while t < Tf
         end
         CK{n_ops+1,1} = speye(N,N);
         CK{n_ops+1,2} = speye(nk,nk);
-        [K1,FLAG,RELRES,ITER] = gmres_sylvester(K0,CK, dlra_bug_tol,N*nk);
+        % [K1,FLAG,RELRES,ITER] = gmres_sylvester(K0,CK, dlra_bug_tol,N*nk);
+        K1 = sylvester(-dt * full(RH_OP{1, 1}), eye(nk, nk) -dt * (RH_OP{2, 2}*V)'*V, K0);
 
         L0 = V*S';
         nl = size(L0,2);
@@ -221,10 +226,11 @@ while t < Tf
         end
         CL{n_ops+1,1} = speye(N,N);
         CL{n_ops+1,2} = speye(nk,nk);
-        [L1,FLAG,RELRES,ITER] = gmres_sylvester(L0,CL, dlra_bug_tol, N*nl);
+        % [L1,FLAG,RELRES,ITER] = gmres_sylvester(L0,CL, dlra_bug_tol, N*nl);
+        L1 = sylvester(eye(nk, nk) - dt*(RH_OP{1,1}*U)'*U, -dt * full(RH_OP{2, 2}), L0');
         % Merge the spaces
         AU = [AU K1];
-        AV = [AV L1];
+        AV = [AV L1'];
 
         % Orthogonalize the proposed spaces
         [QU,RU,PU] = qr(AU,'econ');
@@ -288,12 +294,19 @@ toc
 %
 vEx = exp(-36 * x.^2) .* exp(-36 * y.^2);
 relErr = norm( vEx - (abs(U_vAp * S_vAp * V_vAp')), 'fro' ) / norm( vEx, 'fro');
-relErr2 = norm( U_direct - (abs(U_vAp * S_vAp * V_vAp')), 'fro' ) / norm( U_direct, 'fro');
+relErr2 = norm(U_direct - (U_vAp * S_vAp * V_vAp'), 'fro' ) / norm(U_direct, 'fro');
 
 fprintf('\n' )
 fprintf(' Relative error = %8.2e\n', relErr)
 fprintf(' Direct error = %8.2e\n', relErr2)
 fprintf('\n' )
+
+figure(1)
+mesh(abs(U_direct))
+figure(2)
+mesh(abs(U_vAp * S_vAp * V_vAp'))
+figure(3)
+mesh(abs(U_direct - (U_vAp * S_vAp * V_vAp')))
 
 
 %  -----------------------------------------------------------------------------
