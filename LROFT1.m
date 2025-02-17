@@ -57,6 +57,7 @@ L = kron(A, speye(N, N)) + kron(speye(N, N), A);
 L = speye(N * N, N * N) - (1i / dx^2) * L;
 U_direct = L \ f;
 U_direct = reshape(U_direct, N, N);
+return
   
 % USV holds the integral, intialize first point
 U_vAp = U;

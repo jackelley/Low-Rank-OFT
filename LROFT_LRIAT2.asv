@@ -15,7 +15,7 @@ dx   = (xmax-xmin) / (N+1);
 x    = (xmin + dx:dx:xmax - dx)';
 y = x;
 Tf   = 2;
-dt = 0.001;
+dt = 0.01;
 nt_max = fix(Tf / dt);
 % Truncation at 10 x machine eps for the predicted space.
 TOL_PRE = 10*2.2204e-16;
@@ -264,7 +264,7 @@ while t < Tf
     % Update OFT integral -------------------------------------------------
     %
     C = {U_vAp, S_vAp, V_vAp
-        U, (dt / (2i * pi^2)) * exp(-it * dt) * S, V};
+        U, dt / (2i * pi^2)() * exp(-it * dt) * S, V};
 
     [U_vAp, S_vAp, V_vAp] = truncsum(C, dlra_core_tol, max_rank);
     ranks(it) = current_rank;
