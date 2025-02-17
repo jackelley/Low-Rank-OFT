@@ -15,7 +15,7 @@ dx   = (xmax-xmin) / (N+1);
 x    = (xmin + dx:dx:xmax - dx)';
 y = x;
 Tf   = 6;
-dt = 0.001;
+dt = 0.01;
 nt_max = fix(Tf / dt);
 % Truncation at 10 x machine eps for the predicted space.
 TOL_PRE = 10*2.2204e-16;
@@ -90,7 +90,7 @@ U_direct = reshape(U_direct, N, N);
 % USV holds the integral, intialize first point
 U_vAp = U;
 V_vAp = V;
-S_vAp = 0.5 * dt * S;
+S_vAp = (dt / (2i * pi^2)) * S;
 
 tic
 
