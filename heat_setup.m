@@ -34,12 +34,12 @@ X_vector = reshape(X,n,1);
 Y_vector = reshape(Y,n,1);
 
 e = ones(nx, 1);
-A1 = (1/hx/hx)*spdiags([e, -2 * e, e], -1:1,nx,nx);
+A1 = (1i/hx/hx)*spdiags([e, -2 * e, e], -1:1,nx,nx);
 B1 = speye(ny, ny);
 
 e = ones(ny, 1);
-A2 = (1/hy/hy)*spdiags([e, -2 * e, e], -1:1,ny,ny);
-B2 = speye(nx, nx);
+B2 = (1i/hy/hy)*spdiags([e, -2 * e, e], -1:1,ny,ny);
+A2 = speye(nx, nx);
 
 RH_OP = {A1, B1
          A2, B2};

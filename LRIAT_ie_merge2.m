@@ -1,9 +1,6 @@
 function [U,S,V,RRR,TTT] = LRIAT_ie_merge2(tend,nx,ny,dt,scrpt);
 
 % test residual for Taylor before merge with BUG
-
-    addpath('service/service');
-
     eval(scrpt);
     n_ops = size(RH_OP,1);
     % Truncation at 10 x machine eps for the predicted space.
@@ -115,17 +112,26 @@ function [U,S,V,RRR,TTT] = LRIAT_ie_merge2(tend,nx,ny,dt,scrpt);
         % Galerkin evolution
         if (use_direct == 1)
 
-            Csylv = (Upre'*U)*S*(V'*Vpre);
+            Csylv0 = (Upre'*U)*S*(V'*Vpre);
 
             % B1 and A4 are easy to invert
             % A1 and B4 are contractive
+            B1 = (RH_OP{1,2}*Vpre)'*Vpre;
+            A4 = -dt*(Upre'*(RH_OP{4,1}*Upre));
+            A4I = A4\eye(size(A4));
+            B1I = B1\eye(size(B1));
 
-            A1 = (eye(ru,ru)-dt*(Upre'*(RH_OP{1,1}*Upre)));
-            B2 = dt * ((RH_OP{2,2}*Vpre)'*Vpre);
-            CORE = sylvester(A1,B4,C);
+            A1 = A4I*(eye(ru,ru)-dt*(Upre'*(RH_OP{1,1}*Upre)));
+            A2 = A4I*(-dt*(Upre'*(RH_OP{2,1}*Upre)));
+            A3 = A4I*(-dt*(Upre'*(RH_OP{3,1}*Upre)));
+            B2 = ((RH_OP{2,2}*Vpre)'*Vpre)*B1I;
+            B3 = ((RH_OP{3,2}*Vpre)'*Vpre)*B1I;
+            B4 = ((RH_OP{4,2}*Vpre)'*Vpre)*B1I;
+            CORE0 = Csylv0;
             Csylv0 = A4I*Csylv0*B1I;
             for iter = 1:1000
-
+                C = Csylv0 - A2*CORE0*B2 - A3*CORE0*B3;
+                CORE = sylvester(A1,B4,C);
                 if(norm(CORE-CORE0) < dlra_core_tol)
                     %disp([iter norm(CORE-CORE0)])
                     RRR(it+1,3) = iter;
@@ -280,14 +286,15 @@ function [U,S,V,RRR,TTT] = LRIAT_ie_merge2(tend,nx,ny,dt,scrpt);
             S = Score(1:rnew,1:rnew);
             r = rnew;
         end
-if(mod(it,10) == 1)
-figure(100)
-contour(U*S*V',linspace(-1,1,50),'linewidth',2)
-colorbar
-title(['time ' num2str(t) ' rank ' num2str(r)])
-axis equal
-drawnow
-end
+% $$$         if(mod(it,10) == 1)
+% $$$             figure(100)
+% $$$             contour(U*S*V',linspace(-1,1,50),'linewidth',2)
+% $$$             colorbar
+% $$$             title(['time ' num2str(t) ' rank ' num2str(r)])
+% $$$             axis equal
+% $$$             drawnow
+% $$$         end
+%pause
             t = t+dt;
             % Record the rank and the time
             RRR(it+1,1) = r;

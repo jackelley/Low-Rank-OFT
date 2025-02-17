@@ -139,8 +139,8 @@ toc
 % Print relative error.
 %
 vEx = sin( pi * X ) .* sin(pi * Y); 
-relErr = norm( vEx - (U_vAp * S_vAp * V_vAp'), 'fro' ) / norm( vEx, 'fro');
-relErr2 = norm( U_direct - (U_vAp * S_vAp * V_vAp'), 'fro' ) / norm( U_direct, 'fro');
+relErr = norm( vEx - (abs(U_vAp * S_vAp * V_vAp')), 'fro' ) / norm( vEx, 'fro');
+relErr2 = norm( U_direct - (abs(U_vAp * S_vAp * V_vAp')), 'fro' ) / norm( U_direct, 'fro');
 
 fprintf('\n' )
 fprintf(' Relative error = %8.2e\n', relErr)

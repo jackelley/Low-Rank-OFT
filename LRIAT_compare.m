@@ -19,4 +19,4 @@ CPU_TIME = [];
 nt = 40;
     dt_max = tend/nt;
     tstart = tic;
-    [U,S,V,RRR_M,TTT_M] = LRIAT_ie_merge2(tend,nx,ny,dt_max,scrpt); 
+    [U,S,V,RRR_M,TTT_M] = LRIAT_OFT(tend,nx,ny,dt_max,scrpt); 

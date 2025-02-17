@@ -1,79 +1,117 @@
-function [U,S,V,RRR,TTT] = LRIAT_OFT(tend,nx,ny,dt,scrpt)
-
-% test residual for Taylor before merge with BUG
+%  -----------------------------------------------------------------------------
+%                                  LROFT2.m
+%  -----------------------------------------------------------------------------
+%  Solution of a BVP (an ODE) over [0,1] via the Operator Fourier Transform (OFT).
+%
+%  Author: Jack Kelley, Daniel Appelo, Edwin Jimenez, and Max Cubillos
+%  Modified: 2/2/25
+%  -----------------------------------------------------------------------------
 
 addpath('service/service');
 
-eval(scrpt);
-n_ops = size(RH_OP,1);
+N    = 100; % # of spatial domain points.
+xmin = 0.0; xmax = 1.0;
+dx   = (xmax-xmin) / (N+1);
+x    = (xmin + dx:dx:xmax - dx)';
+y = x;
+Tf   = 6;
+dt = 0.0005;
+nt_max = fix(Tf / dt);
 % Truncation at 10 x machine eps for the predicted space.
 TOL_PRE = 10*2.2204e-16;
+max_rank = 100;
 
-% Store the singular values, the rank, error and time.
-RRR = sparse(100*round(tend/dt),4);
-TTT = [];
-t = 0;
-% Initial data
-% If a low rank representation is known we use it
-% If only a 2D function is known we compute the SVD (could be
-% improved to use threshold SVD)
-if (r > 0)
-    U = zeros(nx,r);
-    V = zeros(ny,r);
-    for ir = 1:r
-        for i = 1:nx
-            U(i,ir) = gx(x(i),ir);
-        end
-        for j = 1:ny
-            V(j,ir) = gy(y(j),ir);
-        end
+use_truncation = 0;
+use_direct = 1;
+
+dlra_core_tol = 1e-12;
+dlra_bug_tol = 1e-8;
+
+hx = 2/(N+1);
+hy = 2/(N+1);
+
+C0 = 1/10;
+C1 = 1;
+C2 = 1;
+
+u   = zeros( N, N );
+um0 = zeros( N, N );
+um1 = zeros( N, N );
+vAp = zeros( N, N );
+X = zeros(N, N);
+Y = zeros(N, N);
+
+% Store rank at each time step
+ranks = zeros(1, nt_max);
+
+for j = 1:N
+    for i = 1:N
+        X(i, j) = x(i);
+        Y(i, j) = x(j);
     end
-    [QU,RU] = qr(U,'econ');
-    [QV,RV] = qr(V,'econ');
-    [U1,S1,V1] = svd(RU*RV');
-    U = QU*U1(:,1:r);
-    V = QV*V1(:,1:r);
-    S = S1(1:r,1:r);
-else
-    T = zeros(nx,ny);
-    % Initial data and forcing
-    for i = 1:nx
-        for j = 1:ny
-            T(i,j) = g(x(i),y(j));
-        end
-    end
-    % T = T - sum(sum(T));
-    % Throughout we work with weighted values
-    [U,S,V] = svd(T);
-    % Truncate based on the Frobenius norm
-    % We sum up the squares of the singular values from below
-    % and compare to TOL^2
-    sd = diag(S);
-    energy = cumsum(sd(end:-1:1).^2);
-    r = length(energy) - length(find(energy < dt^6));
-    U = U(:,1:r);
-    V = V(:,1:r);
-    S = S(1:r,1:r);
 end
 
-RRR(1,1) = r;
+%
+% Set up operator
+%
+e = ones(N, 1);
+A1 = (1i/hx/hx)*spdiags([e, -2 * e, e], -1:1,N,N);
+B1 = speye(N, N);
+
+e = ones(N, 1);
+B2 = (1i/hy/hy)*spdiags([e, -2 * e, e], -1:1,N,N);
+A2 = speye(N, N);
+
+RH_OP = {A1, B1
+    A2, B2};
+
+n_ops = size(RH_OP,1);
+
+%
+% Set the initial condition(s).
+%
+
+U = sin(pi * x);
+V = sin(pi * y);
+S = (1 + 2i * pi^2) * norm(U, 2) * norm(V, 2);
+U = U ./ norm(U, 2);
+V = V ./ norm(V, 2);
+current_rank = 1;
+
+gamma = 2 * 1i * dt / dx^2;
+
+% Do a direct solve
+A_direct = spdiags([e -2*e e], -1:1, N, N);
+f = U * S * V';
+f = f(:);
+L = kron(A_direct, speye(N, N)) + kron(speye(N, N), A_direct);
+L = speye(N * N, N * N) - (1i / dx^2) * L;
+U_direct = L \ f;
+U_direct = reshape(U_direct, N, N);
+
+% USV holds the integral, intialize first point
+U_vAp = U;
+V_vAp = V;
+S_vAp = 0.5 * dt * S;
+
+tic
+
+ranks(1) = current_rank;
 
 h = x(2)-x(1);
 TOL_RES = C2*(dt^2+h^3)/h; %C2*dt^2;
 TOL1 = C1*dt;
-% FOR REVISION
 TOL2 = C2*(dt^2+h^3)/h;
-% FIRST SUBMIT
-% TOL2 = C2*dt^2;
 
 % Do some timestepping
 it = 0;
 t = 0;
-while t < tend
+while t < Tf
     it = it+1;
-    if (t+dt > tend)
-        dt = tend-t;
+    if (t+dt > Tf)
+        dt = Tf-t;
     end
+
     % Prediction step.
     % Here we compute the column and row spaces
     % Additions to the subspaces based on
@@ -84,17 +122,17 @@ while t < tend
             C{iops,2} = S;
             C{iops,3} = RH_OP{iops,2}*V;
         end
-        [QU,QS,QV] = trunc_sum(C,TOL1,n_ops*r);
+        [QU,QS,QV] = truncsum(C,TOL1,n_ops*current_rank);
         AU = [U QU];
         AV = [V QV];
     else
-        AU = zeros(nx,(n_ops+1)*r);
-        AV = zeros(ny,(n_ops+1)*r);
-        AU(:,1:r) = U;
-        AV(:,1:r) = V;
+        AU = zeros(N,(n_ops+1)*current_rank);
+        AV = zeros(N,(n_ops+1)*current_rank);
+        AU(:,1:current_rank) = U;
+        AV(:,1:current_rank) = V;
         for iops = 1:n_ops
-            AU(:,iops*r+1:(iops+1)*r) = RH_OP{iops,1}*U;
-            AV(:,iops*r+1:(iops+1)*r) = RH_OP{iops,2}*V;
+            AU(:,iops*current_rank+1:(iops+1)*current_rank) = RH_OP{iops,1}*U;
+            AV(:,iops*current_rank+1:(iops+1)*current_rank) = RH_OP{iops,2}*V;
         end
     end
     % Start by the "extra" solve
@@ -113,7 +151,7 @@ while t < tend
     % predicted subspaces
     % This is the implicit Euler step.
     % Galerkin evolution
-    Csylv = (Upre'*U)*S*(V'*Vpre);
+    Csylv = (Upre'*U)*(S)*(V'*Vpre);
 
     AT = (eye(ru,ru)-dt*(Upre'*(RH_OP{1,1}*Upre)));
     BT = -dt * ((RH_OP{2,2}*Vpre)'*Vpre);
@@ -143,7 +181,7 @@ while t < tend
     CRES{n_ops+2,2} = S;
     CRES{n_ops+2,3} = V;
     % We truncate slightly tighter than for the solver
-    [rU,rS,rV] = trunc_sum(CRES,0.1*TOL2,n_ops*rnew);
+    [rU,rS,rV] = truncsum(CRES,0.1*TOL2,n_ops*rnew);
     res = sqrt(inner_low(rU,rS,rV,rU,rS,rV));
 
     % If the residual is small enough we break out
@@ -155,9 +193,8 @@ while t < tend
         U = Unew;
         V = Vnew;
         S = Snew;
-        r = rnew;
+        current_rank = rnew;
     else
-        RRR(it+1,2) = RRR(it+1,2) + 1;
 
         % Then we add the BUG spaces
         K0 = U*S;
@@ -167,11 +204,9 @@ while t < tend
             CK{iops,1} = RH_OP{iops,1};
             CK{iops,2} = -dt*(RH_OP{iops,2}*V)'*V;
         end
-        CK{n_ops+1,1} = speye(nx,nx);
+        CK{n_ops+1,1} = speye(N,N);
         CK{n_ops+1,2} = speye(nk,nk);
-        [K1,FLAG,RELRES,ITER] = gmres_sylvester(K0,CK, dlra_bug_tol,nx*nk);
-
-        RRR(it+1,4) = RRR(it+1,4) + ITER(2);
+        [K1,FLAG,RELRES,ITER] = gmres_sylvester(K0,CK, dlra_bug_tol,N*nk);
 
         L0 = V*S';
         nl = size(L0,2);
@@ -180,10 +215,9 @@ while t < tend
             CL{iops,1} = RH_OP{iops,2};
             CL{iops,2} = -dt*(RH_OP{iops,1}*U)'*U;
         end
-        CL{n_ops+1,1} = speye(ny,ny);
+        CL{n_ops+1,1} = speye(N,N);
         CL{n_ops+1,2} = speye(nk,nk);
-        [L1,FLAG,RELRES,ITER] = gmres_sylvester(L0,CL, dlra_bug_tol, ny*nl);
-        RRR(it+1,4) = RRR(it+1,4) + ITER(2);
+        [L1,FLAG,RELRES,ITER] = gmres_sylvester(L0,CL, dlra_bug_tol, N*nl);
         % Merge the spaces
         AU = [AU K1];
         AV = [AV L1];
@@ -219,22 +253,37 @@ while t < tend
         U = Upre*Ucore(:,1:rnew);
         V = Vpre*Vcore(:,1:rnew);
         S = Score(1:rnew,1:rnew);
-        r = rnew;
+        current_rank = rnew;
     end
-    if(mod(it,1) == 0)
-        figure(100)
-        contour(abs(U*S*V'),linspace(-1,1,50),'linewidth',2)
-        colorbar
-        title(['time ' num2str(t) ' rank ' num2str(r)])
-        axis equal
-        drawnow
-        pause
-    end
+
+    %
+    % Update OFT integral -------------------------------------------------
+    %
+    C = {U_vAp, S_vAp, V_vAp
+        U, dt * exp(-it * dt) * S, V};
+
+    U_vAp = U;
+    S_vAp = dt * exp(-it * dt) * S;
+    V_vAp = V;
+    % [U_vAp, S_vAp, V_vAp] = truncsum(C, dlra_core_tol, max_rank);
+    ranks(it) = current_rank;
+
     t = t+dt;
-    % Record the rank and the time
-    RRR(it+1,1) = r;
-    TTT(it+1) = t;
 end
-TTT = TTT(1:it+1);
-RRR = RRR(1:it+1,:);
-end
+toc
+
+%
+% Print relative error.
+%
+vEx = sin( pi * X ) .* sin(pi * Y);
+relErr = norm( vEx - (U_vAp * S_vAp * V_vAp'), 'fro' ) / norm( vEx, 'fro');
+relErr2 = norm( U_direct - (U_vAp * S_vAp * V_vAp'), 'fro' ) / norm( U_direct, 'fro');
+
+fprintf('\n' )
+fprintf(' Relative error = %8.2e\n', relErr)
+fprintf(' Direct error = %8.2e\n', relErr2)
+fprintf('\n' )
+
+
+%  -----------------------------------------------------------------------------
+%  -----------------------------------------------------------------------------
