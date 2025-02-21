@@ -147,6 +147,20 @@ fprintf(' Relative error = %8.2e\n', relErr)
 fprintf(' Direct error = %8.2e\n', relErr2)
 fprintf('\n' )
 
+figure(2)
+subplot(2, 4, 1)
+mesh(real(U_direct))
+subplot(2, 4, 2)
+mesh(imag(U_direct))
+subplot(2, 4, 3)
+mesh(real(U_vAp * S_vAp * V_vAp'))
+subplot(2, 4, 4)
+mesh(imag(U_vAp * S_vAp * V_vAp'))
+subplot(2, 4, 5)
+mesh(real(U_direct) - real(U_vAp * S_vAp * V_vAp'))
+subplot(2, 4, 6)
+mesh(imag(U_direct) - imag(U_vAp * S_vAp * V_vAp'))
+
  
 %  -----------------------------------------------------------------------------
 %  -----------------------------------------------------------------------------

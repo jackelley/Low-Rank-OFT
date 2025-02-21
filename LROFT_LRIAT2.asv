@@ -9,13 +9,13 @@
 
 addpath('service/service');
 
-N    = 100; % # of spatial domain points.
+N    = 50; % # of spatial domain points.
 xmin = -1.0; xmax = 1.0;
 dx   = (xmax-xmin) / (N+1);
 x    = (xmin + dx:dx:xmax - dx)';
 y = x;
-Tf   = 3;
-dt = 0.001;
+Tf   = 6;
+dt = 0.01;
 nt_max = fix(Tf / dt);
 % Truncation at 10 x machine eps for the predicted space.
 TOL_PRE = 10*2.2204e-16;
@@ -30,9 +30,9 @@ dlra_bug_tol = 1e-8;
 hx = 2/(N+1);
 hy = 2/(N+1);
 
-C0 = 1e-1;
-C1 = 1e-0;
-C2 = 1e-0;
+C0 = 1/10;
+C1 = 1;
+C2 = 1;
 
 u   = zeros( N, N );
 um0 = zeros( N, N );
@@ -103,12 +103,13 @@ S_f = (1 + 2i * pi^2) * S_ex;
 
 % Initialize time stepping right hand side
 U = U_f;
-V = V_f;
-S = S_f;
+V = V_ex;
+S = (1 + 2i * pi^2) * S_ex;
 % USV holds the integral, intialize first point
-U_vAp = U;
-V_vAp = V;
-S_vAp = dt * S;
+U_vAp = U_ex;
+V_vAp = V_ex;
+% S_vAp = dt * S;
+S_vAp = dt / (2i * pi^2) * (1 + 2i * pi^2) * S_ex;
 
 tic
 
@@ -134,7 +135,6 @@ while t < Tf
     subplot(1, 4, 4)
     mesh(imag(U_vAp * S_vAp * V_vAp'))
     drawnow
-    pause
     end
 
     it = it+1;
@@ -292,7 +292,7 @@ while t < Tf
     % Update OFT integral -------------------------------------------------
     %
     C = {U_vAp, S_vAp, V_vAp
-        U, dt * exp(-it * dt) * S, V};
+        U, (dt / (2i * pi^2)) * exp(-it * dt) * S, V};
 
     [U_vAp, S_vAp, V_vAp] = truncsum(C, dlra_core_tol, max_rank);
     ranks(it) = current_rank;
@@ -324,17 +324,14 @@ fprintf(' Direct error = %8.2e\n', relErr2)
 fprintf('\n' )
 
 figure(2)
-subplot(2, 4, 1)
+subplot(1, 4, 1)
 mesh(real(U_direct))
-subplot(2, 4, 2)
+subplot(1, 4, 2)
 mesh(imag(U_direct))
-subplot(2, 4, 3)
+subplot(1, 4, 3)
 mesh(real(U_vAp * S_vAp * V_vAp'))
-subplot(2, 4, 4)
+subplot(1, 4, 4)
 mesh(imag(U_vAp * S_vAp * V_vAp'))
-subplot(2, 4, 5)
-mesh(real(U_direct) - real(U_vAp * S_vAp * V_vAp'))
-subplot(2, 4, 6)
-mesh(imag(U_direct) - imag(U_vAp * S_vAp * V_vAp'))
+
 %  -----------------------------------------------------------------------------
 %  -----------------------------------------------------------------------------
