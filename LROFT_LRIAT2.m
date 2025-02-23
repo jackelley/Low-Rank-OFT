@@ -14,7 +14,7 @@ xmin = -1.0; xmax = 1.0;
 dx   = (xmax-xmin) / (N+1);
 x    = (xmin + dx:dx:xmax - dx)';
 y = x;
-Tf   = 3;
+Tf   = 6;
 dt = 0.001;
 nt_max = fix(Tf / dt);
 % Truncation at 10 x machine eps for the predicted space.
@@ -23,6 +23,7 @@ max_rank = 100;
 
 use_truncation = 0;
 use_direct = 1;
+plot_integral = 0;
 
 dlra_core_tol = 1e-12;
 dlra_bug_tol = 1e-8;
@@ -72,27 +73,20 @@ n_ops = size(RH_OP,1);
 % Set the initial condition(s).
 %
 current_rank = 1;
-% U = exp(-36 * y.^2);
-% V = exp(-36 * x.^2);
+% U_ex = exp(-36 * y.^2);
+% V_ex = exp(-36 * x.^2);
 U_ex = sin(pi * x);
 V_ex = sin(pi * y);
 S_ex = norm(U_ex, 2) * norm(V_ex, 2);
 U_ex = U_ex ./ norm(U_ex, 2);
 V_ex = V_ex ./ norm(V_ex, 2);
 
-% [QU,RU] = qr(U,'econ');
-% [QV,RV] = qr(V,'econ');
-% [U1,S1,V1] = svd(RU*RV');
-% U = QU*U1(:,1:current_rank);
-% V = QV*V1(:,1:current_rank);
-% S = dt * S1(1:current_rank,1:current_rank);
-
 % Do a direct solve
 A_direct = spdiags([e -2*e e], -1:1, N, N);
 f = (1 + 2i * pi^2) * U_ex * S_ex * V_ex';
 f_vec = f(:);
 L = kron(A_direct, speye(N, N)) + kron(speye(N, N), A_direct);
-L = speye(N * N, N * N) - (1i / dx^2) * L;
+L = speye(N * N, N * N) - (1i * dt / dx^2) * L;
 U_direct = L \ f_vec;
 U_direct = reshape(U_direct, N, N);
 % return
@@ -108,7 +102,7 @@ S = S_f;
 % USV holds the integral, intialize first point
 U_vAp = U;
 V_vAp = V;
-S_vAp = dt * S;
+S_vAp = 0.5 * dt * S;
 
 tic
 
@@ -119,22 +113,30 @@ TOL_RES = C2*(dt^2+h^3)/h; %C2*dt^2;
 TOL1 = C1*dt;
 TOL2 = C2*(dt^2+h^3)/h;
 
+% store imaginary error
+if plot_integral == 1
+    imag_integrand = zeros(nt_max, 1);
+    real_integrand = zeros(nt_max, 1);
+    imag_error = zeros(nt_max, 1);
+    real_error = zeros(nt_max, 1);
+end
+
 % Do some timestepping
 it = 0;
 t = 0;
 while t < Tf
     if 1 == 2
-    figure(1)
-    subplot(1, 4, 1)
-    mesh(real(U * S * V'))
-    subplot(1, 4, 2)
-    mesh(imag(U * S * V'))
-    subplot(1, 4, 3)
-    mesh(real(U_vAp * S_vAp * V_vAp'))
-    subplot(1, 4, 4)
-    mesh(imag(U_vAp * S_vAp * V_vAp'))
-    drawnow
-    pause
+        figure(1)
+        subplot(1, 4, 1)
+        mesh(real(U * S * V'))
+        subplot(1, 4, 2)
+        mesh(imag(U * S * V'))
+        subplot(1, 4, 3)
+        mesh(real(U_vAp * S_vAp * V_vAp'))
+        subplot(1, 4, 4)
+        mesh(imag(U_vAp * S_vAp * V_vAp'))
+        drawnow
+        pause
     end
 
     it = it+1;
@@ -297,6 +299,24 @@ while t < Tf
     [U_vAp, S_vAp, V_vAp] = truncsum(C, dlra_core_tol, max_rank);
     ranks(it) = current_rank;
 
+    if plot_integral == 1
+        temp_imag_int = imag(U_vAp * S_vAp * V_vAp');
+        [~, max_index] = max(temp_imag_int, [], 'all', 'linear');
+        imag_integrand(it, 1) = temp_imag_int(max_index);
+
+        temp_real_int = real(U_vAp * S_vAp * V_vAp');
+        [~, max_index] = max(temp_real_int, [], 'all', 'linear');
+        real_integrand(it, 1) = temp_real_int(max_index);
+
+        imag_difference = imag(U_direct) - imag(U_vAp * S_vAp * V_vAp');
+        [~, max_index] = max(imag_difference, [], 'all', 'linear');
+        imag_error(it, 1) = imag_difference(max_index);
+
+        real_difference = real(U_direct) - real(U_vAp * S_vAp * V_vAp');
+        [~, max_index] = max(real_difference, [], 'all', 'linear');
+        real_error(it, 1) = real_difference(max_index);
+    end
+
     t = t+dt;
 
     % if(mod(it,1) == 0)
@@ -336,5 +356,33 @@ subplot(2, 4, 5)
 mesh(real(U_direct) - real(U_vAp * S_vAp * V_vAp'))
 subplot(2, 4, 6)
 mesh(imag(U_direct) - imag(U_vAp * S_vAp * V_vAp'))
+
+if plot_integral == 1
+    figure(3)
+    subplot(2, 1, 1)
+    plot(real_integrand)
+    title("Real")
+    xlabel("Time step")
+    ylabel("Value")
+    subplot(2, 1, 2)
+    plot(imag_integrand)
+    title("Imaginary")
+    xlabel("Time step")
+    ylabel("Value")
+    sgtitle("Adaptive solve integral")
+
+    figure(4)
+    subplot(2, 1, 1)
+    plot(real_error)
+    title("Real")
+    xlabel("Time step")
+    ylabel("Value")
+    subplot(2, 1, 2)
+    plot(imag_error)
+    title("Imaginary")
+    xlabel("Time step")
+    ylabel("Value")
+    sgtitle("Adaptive solve integral error")
+end
 %  -----------------------------------------------------------------------------
 %  -----------------------------------------------------------------------------

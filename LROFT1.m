@@ -57,7 +57,7 @@ L = kron(A, speye(N, N)) + kron(speye(N, N), A);
 L = speye(N * N, N * N) - (1i / dx^2) * L;
 U_direct = L \ f;
 U_direct = reshape(U_direct, N, N);
-  
+
 % USV holds the integral, intialize first point
 U_vAp = U;
 V_vAp = V;
@@ -67,7 +67,7 @@ S_vAp = 0.5 * dt * S;
 Um0 = U;
 Vm0 = V;
 Sm0 = S;
-  
+
 nt = 1;
 
 r = 1i * dt / dx^2;
@@ -97,6 +97,12 @@ Um0 = U;
 Vm0 = V;
 Sm0 = S;
 
+% store imaginary error
+imag_integrand = zeros(nt_max, 1);
+real_integrand = zeros(nt_max, 1);
+imag_error = zeros(nt_max, 1);
+real_error = zeros(nt_max, 1);
+
 %
 % For n ≥ 2, use a centered scheme (Leapfrog) for time and CS for space.
 %
@@ -104,23 +110,57 @@ tic
 r = 2 * 1i * dt / dx^2;
 
 for nt = 2:nt_max
-    
+
+    if  1 == 2 % nt > nt_max / 2
+        figure(2)
+        subplot(2, 4, 1)
+        mesh(real(U_direct))
+        subplot(2, 4, 2)
+        mesh(imag(U_direct))
+        subplot(2, 4, 3)
+        mesh(real(U_vAp * S_vAp * V_vAp'))
+        subplot(2, 4, 4)
+        mesh(imag(U_vAp * S_vAp * V_vAp'))
+        subplot(2, 4, 5)
+        mesh(real(U_direct) - real(U_vAp * S_vAp * V_vAp'))
+        subplot(2, 4, 6)
+        mesh(imag(U_direct) - imag(U_vAp * S_vAp * V_vAp'))
+        title(sprintf("Iteration %d", nt))
+        drawnow
+    end
+
     % Take one time step
     C = {Um1, Sm1, Vm1
-         A * U, r * S, V
-         U, r * S, A * V};
+        A * U, r * S, V
+        U, r * S, A * V};
 
     [U, S, V] = truncsum(C, tol, max_rank);
 
     % Update OFT sum
     C = {U_vAp, S_vAp, V_vAp
-         U, dt * exp( -nt * dt ) * S, V};
+        U, dt * exp( -nt * dt ) * S, V};
 
     [U_vAp, S_vAp, V_vAp] = truncsum(C, tol, max_rank);
 
+    temp_imag_int = imag(U_vAp * S_vAp * V_vAp');
+    [~, max_index] = max(temp_imag_int, [], 'all', 'linear');
+    imag_integrand(nt, 1) = temp_imag_int(max_index);
+
+    temp_real_int = real(U_vAp * S_vAp * V_vAp');
+    [~, max_index] = max(temp_real_int, [], 'all', 'linear');
+    real_integrand(nt, 1) = temp_real_int(max_index);
+
+    imag_difference = imag(U_direct) - imag(U_vAp * S_vAp * V_vAp');
+    [~, max_index] = max(imag_difference, [], 'all', 'linear');
+    imag_error(nt, 1) = imag_difference(max_index);
+
+    real_difference = real(U_direct) - real(U_vAp * S_vAp * V_vAp');
+    [~, max_index] = max(real_difference, [], 'all', 'linear');
+    real_error(nt, 1) = real_difference(max_index);
+
     % Store rank
     ranks(nt) = size(S_vAp, 1);
-    
+
     %
     % Update previous solutions.
     %
@@ -138,7 +178,7 @@ toc
 %
 % Print relative error.
 %
-vEx = sin( pi * X ) .* sin(pi * Y); 
+vEx = sin( pi * X ) .* sin(pi * Y);
 relErr = norm( vEx - (abs(U_vAp * S_vAp * V_vAp')), 'fro' ) / norm( vEx, 'fro');
 relErr2 = norm( U_direct - (abs(U_vAp * S_vAp * V_vAp')), 'fro' ) / norm( U_direct, 'fro');
 
@@ -161,6 +201,31 @@ mesh(real(U_direct) - real(U_vAp * S_vAp * V_vAp'))
 subplot(2, 4, 6)
 mesh(imag(U_direct) - imag(U_vAp * S_vAp * V_vAp'))
 
- 
+figure(3)
+subplot(2, 1, 1)
+plot(real_integrand)
+title("Real")
+xlabel("Time step")
+ylabel("Value")
+subplot(2, 1, 2)
+plot(imag_integrand)
+title("Imaginary")
+xlabel("Time step")
+ylabel("Value")
+sgtitle("Dense solve integral")
+
+figure(4)
+subplot(2, 1, 1)
+plot(real_error)
+title("Real")
+xlabel("Time step")
+ylabel("Value")
+subplot(2, 1, 2)
+plot(imag_error)
+title("Imaginary")
+xlabel("Time step")
+ylabel("Value")
+sgtitle("Dense solve integral error")
+
 %  -----------------------------------------------------------------------------
 %  -----------------------------------------------------------------------------
