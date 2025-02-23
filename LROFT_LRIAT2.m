@@ -86,10 +86,9 @@ A_direct = spdiags([e -2*e e], -1:1, N, N);
 f = (1 + 2i * pi^2) * U_ex * S_ex * V_ex';
 f_vec = f(:);
 L = kron(A_direct, speye(N, N)) + kron(speye(N, N), A_direct);
-L = speye(N * N, N * N) - (1i * dt / dx^2) * L;
+L = speye(N * N, N * N) - (1i / dx^2) * L;
 U_direct = L \ f_vec;
 U_direct = reshape(U_direct, N, N);
-% return
 
 U_f = U_ex;
 V_f = V_ex;
