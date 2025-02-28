@@ -47,15 +47,15 @@ function [U_vAp, S_vAp, V_vAp,ranks]=LROFT_LRIAT2(N,dt,Tf);
     % Set the initial condition(s).
     %
     current_rank = 1;
-    U_ex = sin(pi * x);
-    V_ex = sin(pi * y);
+    U_ex = exp(-36 * x.^2);
+    V_ex = exp(-36 * y.^2);
     S_ex = norm(U_ex, 2) * norm(V_ex, 2);
     U_ex = U_ex ./ norm(U_ex, 2);
     V_ex = V_ex ./ norm(V_ex, 2);
 
     U_f = U_ex;
     V_f = V_ex;
-    S_f = (1 + 2i * pi^2) * S_ex;
+    S_f = S_ex;
     % Initialize time stepping right hand side
     U = U_f;
     V = V_f;
@@ -201,7 +201,7 @@ function [U_vAp, S_vAp, V_vAp,ranks]=LROFT_LRIAT2(N,dt,Tf);
             current_rank = rnew;
         end
         %
-        % Icrement OFT integral -------------------------------------------------
+        % Increment OFT integral -------------------------------------------------
         %
         C = {U_vAp,S_vAp,V_vAp
              U,dt*exp(-(t+dt))*S,V};

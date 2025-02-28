@@ -1,23 +1,22 @@
 clear
 
-N = 99;
+N = 100;
 
-addpath('service')
 tstart = tic;
-[UD_OFT,U_EX]=DOFT2(N);
+[UD_OFT,U_EX]=DOFT2_gauss(N);
 telapsedD = toc(tstart);
 D_err = norm(UD_OFT-U_EX)/norm(U_EX);
     
 
-for Tf = [pi 2*pi 3*pi];
+for Tf = 3*pi
     DATA = [];    
     for NT = [50 100 200 400 800 1600]*ceil(Tf/pi - 0.1)
         dt = Tf / NT;
         tstart = tic;
-        [UFR_OFT] = FROFT2(N,dt,Tf);
+        [UFR_OFT] = FROFT2_gauss(N,dt,Tf);
         telapsedFR = toc(tstart);
         tstart = tic;
-        [U_vAp, S_vAp, V_vAp,ranks]=LROFT_LRIAT2(N,dt,Tf);
+        [U_vAp, S_vAp, V_vAp,ranks]=LROFT_LRIAT2_gauss(N,dt,Tf);
         telapsedLR = toc(tstart);
         ULR_OFT = U_vAp*S_vAp*V_vAp';
         FR_err = norm(UFR_OFT-U_EX)/norm(U_EX);
@@ -34,7 +33,9 @@ for Tf = [pi 2*pi 3*pi];
            DATA(:,1),DATA(:,1).^2,'k:',...
            'linewidth',2)
     set(gca,'Fontsize',20)
-    title('Errors vs timestep')
+    title('Errors vs Timestep')
+    xlabel("Error")
+    ylabel("Timestep Size")
     set(gca,'linew',2)
     legend('Full-rank','Low-rank','Direct','2nd order')
     hold on
@@ -46,7 +47,9 @@ for Tf = [pi 2*pi 3*pi];
            DATA(:,5),DATA(:,3),'r--',...
            'linewidth',2)
     set(gca,'Fontsize',20)
-    title('time vs error')
+    title('Time vs Error')
+    xlabel("Time (s)")
+    ylabel("Error")
     set(gca,'linew',2)
     legend('Full-rank','Low-rank')
     hold on

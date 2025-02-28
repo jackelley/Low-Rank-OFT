@@ -12,14 +12,14 @@ function [U_OFT] = FROFT2(N,dt,Tf);
     %
     % Set the initial condition(s).
     %
-    U_ex = sin(pi * x);
-    V_ex = sin(pi * y);
+    U_ex = exp(-36 * x.^2);
+    V_ex = exp(-36 * y.^2);
     S_ex = norm(U_ex, 2) * norm(V_ex, 2);
     U_ex = U_ex ./ norm(U_ex, 2);
     V_ex = V_ex ./ norm(V_ex, 2);
     e = ones(N, 1);
     A_direct = spdiags([e -2*e e], -1:1, N, N);
-    f = (1 + 2i * pi^2) * U_ex * S_ex * V_ex';
+    f = U_ex * S_ex * V_ex';
     f_vec = f(:);
     L = kron(A_direct, speye(N, N)) + kron(speye(N, N), A_direct);
     BWD = speye(N * N, N * N) - 0.5*dt*(1i/dx^2) * L;
@@ -27,7 +27,7 @@ function [U_OFT] = FROFT2(N,dt,Tf);
 
     U_f = U_ex;
     V_f = V_ex;
-    S_f = (1 + 2i * pi^2) * S_ex;
+    S_f = S_ex;
     % Initialize time stepping right hand side
     U = U_f;
     V = V_f;
