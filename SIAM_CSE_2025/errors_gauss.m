@@ -1,6 +1,6 @@
 clear
 
-N = 100;
+N = 200;
 
 tstart = tic;
 [UD_OFT,U_EX]=DOFT2_gauss(N);
@@ -8,9 +8,9 @@ telapsedD = toc(tstart);
 D_err = norm(UD_OFT-U_EX)/norm(U_EX);
     
 
-for Tf = 3*pi
+for Tf = 6
     DATA = [];    
-    for NT = [50 100 200 400 800 1600]*ceil(Tf/pi - 0.1)
+    for NT = [50 100 200 400]*ceil(Tf/pi - 0.1)
         dt = Tf / NT;
         tstart = tic;
         [UFR_OFT] = FROFT2_gauss(N,dt,Tf);
@@ -19,8 +19,8 @@ for Tf = 3*pi
         [U_vAp, S_vAp, V_vAp,ranks]=LROFT_LRIAT2_gauss(N,dt,Tf);
         telapsedLR = toc(tstart);
         ULR_OFT = U_vAp*S_vAp*V_vAp';
-        FR_err = norm(UFR_OFT-U_EX)/norm(U_EX);
-        LR_err = norm(ULR_OFT-U_EX)/norm(U_EX);
+        FR_err = norm(UFR_OFT-UD_OFT)/norm(U_EX);
+        LR_err = norm(ULR_OFT-UD_OFT)/norm(U_EX);
         DATA = [DATA ;[dt telapsedFR telapsedLR FR_err LR_err D_err]];    
     end
     

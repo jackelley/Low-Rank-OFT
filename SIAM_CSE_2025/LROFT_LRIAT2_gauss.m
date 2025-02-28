@@ -205,7 +205,7 @@ function [U_vAp, S_vAp, V_vAp,ranks]=LROFT_LRIAT2(N,dt,Tf);
         %
         C = {U_vAp,S_vAp,V_vAp
              U,dt*exp(-(t+dt))*S,V};
-        [U_vAp, S_vAp, V_vAp] = trunc_sum(C, dlra_core_tol, max_rank);
+        [U_vAp, S_vAp, V_vAp] = trunc_sum(C, TOL_RES, max_rank);
         ranks(it) = current_rank;
     end
 end

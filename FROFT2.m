@@ -1,5 +1,5 @@
 function [U_OFT] = FROFT2(N,dt,Tf);
-    addpath('service/service');
+    addpath('service');
     xmin = -1.0;
     xmax =  1.0;
     dx = (xmax-xmin) / (N+1);
