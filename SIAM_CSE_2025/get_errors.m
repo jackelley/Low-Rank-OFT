@@ -1,6 +1,6 @@
 clear
 
-N = 100;
+N = 50;
 
 tstart = tic;
 [UD_OFT,U_EX]=DOFT2(N);
